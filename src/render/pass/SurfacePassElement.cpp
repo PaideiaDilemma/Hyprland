@@ -38,7 +38,11 @@ void CSurfacePassElement::draw(const CRegion& damage) {
     if (!data.texture)
         return;
 
-    const auto& TEXTURE = data.texture;
+    const auto& TEXTURE  = data.texture;
+    const auto  PMONITOR = data.pMonitor.lock();
+
+    if (!PMONITOR)
+        return;
 
     // this is bad, probably has been logged elsewhere. Means the texture failed
     // uploading to the GPU.
@@ -65,7 +69,7 @@ void CSurfacePassElement::draw(const CRegion& damage) {
 
     const auto  PROJSIZEUNSCALED = windowBox.size();
 
-    windowBox.scale(data.pMonitor->scale);
+    windowBox.scale(PMONITOR->scale);
     windowBox.round();
 
     if (windowBox.width <= 1 || windowBox.height <= 1) {
@@ -73,12 +77,12 @@ void CSurfacePassElement::draw(const CRegion& damage) {
         return;
     }
 
-    const bool MISALIGNEDFSV1 = std::floor(data.pMonitor->scale) != data.pMonitor->scale /* Fractional */ && data.surface->current.scale == 1 /* fs protocol */ &&
+    const bool MISALIGNEDFSV1 = std::floor(PMONITOR->scale) != PMONITOR->scale /* Fractional */ && data.surface->current.scale == 1 /* fs protocol */ &&
         windowBox.size() != data.surface->current.bufferSize /* misaligned */ && DELTALESSTHAN(windowBox.width, data.surface->current.bufferSize.x, 3) &&
         DELTALESSTHAN(windowBox.height, data.surface->current.bufferSize.y, 3) /* off by one-or-two */ &&
         (!data.pWindow || (!data.pWindow->m_vRealSize.isBeingAnimated() && !INTERACTIVERESIZEINPROGRESS)) /* not window or not animated/resizing */;
 
-    g_pHyprRenderer->calculateUVForSurface(data.pWindow, data.surface, data.pMonitor->self.lock(), data.mainSurface, windowBox.size(), PROJSIZEUNSCALED, MISALIGNEDFSV1);
+    g_pHyprRenderer->calculateUVForSurface(data.pWindow, data.surface, PMONITOR, data.mainSurface, windowBox.size(), PROJSIZEUNSCALED, MISALIGNEDFSV1);
 
     // check for fractional scale surfaces misaligning the buffer size
     // in those cases it's better to just force nearest neighbor
@@ -118,13 +122,17 @@ void CSurfacePassElement::draw(const CRegion& damage) {
     }
 
     if (!g_pHyprRenderer->m_bBlockSurfaceFeedback)
-        data.surface->presentFeedback(data.when, data.pMonitor->self.lock());
+        data.surface->presentFeedback(data.when, PMONITOR);
 
     g_pHyprOpenGL->blend(true);
 }
 
 CBox CSurfacePassElement::getTexBox() {
-    const double outputX = -data.pMonitor->vecPosition.x, outputY = -data.pMonitor->vecPosition.y;
+    const auto PMONITOR = data.pMonitor.lock();
+    if (!PMONITOR)
+        return CBox{};
+
+    const double outputX = -PMONITOR->vecPosition.x, outputY = -PMONITOR->vecPosition.y;
 
     const auto   INTERACTIVERESIZEINPROGRESS = data.pWindow && g_pInputManager->currentlyDraggedWindow && g_pInputManager->dragMode == MBIND_RESIZE;
     auto         PSURFACE                    = CWLSurface::fromResource(data.surface);
@@ -201,22 +209,24 @@ bool CSurfacePassElement::needsPrecomputeBlur() {
 }
 
 std::optional<CBox> CSurfacePassElement::boundingBox() {
-    return getTexBox();
+    const auto BOX = getTexBox();
+    return BOX.size() == Vector2D{0, 0} ? std::nullopt : std::optional(BOX);
 }
 
 CRegion CSurfacePassElement::opaqueRegion() {
     auto        PSURFACE = CWLSurface::fromResource(data.surface);
+    const auto  PMONITOR = data.pMonitor.lock();
 
     const float ALPHA = data.alpha * data.fadeAlpha * (PSURFACE ? PSURFACE->m_pAlphaModifier : 1.F);
 
     if (ALPHA < 1.F)
         return {};
 
-    if (data.surface && data.surface->current.size == Vector2D{data.w, data.h}) {
+    if (PMONITOR && data.surface && data.surface->current.size == Vector2D{data.w, data.h}) {
         CRegion    opaqueSurf = data.surface->current.opaque.copy().intersect(CBox{{}, {data.w, data.h}});
         const auto texBox     = getTexBox();
         opaqueSurf.scale(texBox.size() / Vector2D{data.w, data.h});
-        return opaqueSurf.translate(data.pos + data.localPos - data.pMonitor->vecPosition).expand(-data.rounding);
+        return opaqueSurf.translate(data.pos + data.localPos - PMONITOR->vecPosition).expand(-data.rounding);
     }
 
     return data.texture && data.texture->m_bOpaque ? boundingBox()->expand(-data.rounding) : CRegion{};
@@ -225,6 +235,6 @@ CRegion CSurfacePassElement::opaqueRegion() {
 void CSurfacePassElement::discard() {
     if (!g_pHyprRenderer->m_bBlockSurfaceFeedback) {
         Debug::log(TRACE, "discard for invisible surface");
-        data.surface->presentFeedback(data.when, data.pMonitor->self.lock(), true);
+        data.surface->presentFeedback(data.when, data.pMonitor.lock(), true);
     }
 }
