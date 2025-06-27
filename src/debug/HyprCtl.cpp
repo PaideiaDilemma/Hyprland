@@ -776,6 +776,43 @@ static std::string devicesRequest(eHyprCtlOutputFormat format, std::string reque
 static std::string animationsRequest(eHyprCtlOutputFormat format, std::string request) {
     std::string ret = "";
     if (format == eHyprCtlOutputFormat::FORMAT_NORMAL) {
+        ret += "\nactive:\n";
+
+        for (auto const& animvar : g_pAnimationManager->m_vActiveAnimatedVariables) {
+            const bool  EXPIRED       = animvar.expired();
+            std::string function_name = "";
+            std::string source        = "";
+
+            if (!EXPIRED) {
+                switch (animvar->m_Type) {
+                    case AVARTYPE_FLOAT: {
+                        auto pTypedAV = dynamic_cast<CAnimatedVariable<float>*>(animvar.get());
+                        RASSERT(pTypedAV, "Failed to upcast animated float");
+                        function_name = pTypedAV->m_Context.sloc.function_name();
+                        source        = std::format("{}:{}", pTypedAV->m_Context.sloc.file_name(), pTypedAV->m_Context.sloc.line());
+                    } break;
+                    case AVARTYPE_VECTOR: {
+                        auto pTypedAV = dynamic_cast<CAnimatedVariable<Vector2D>*>(animvar.get());
+                        RASSERT(pTypedAV, "Failed to upcast animated Vector2D");
+                        function_name = pTypedAV->m_Context.sloc.function_name();
+                        source        = std::format("{}:{}", pTypedAV->m_Context.sloc.file_name(), pTypedAV->m_Context.sloc.line());
+                    } break;
+                    case AVARTYPE_COLOR: {
+                        auto pTypedAV = dynamic_cast<CAnimatedVariable<CHyprColor>*>(animvar.get());
+                        RASSERT(pTypedAV, "Failed to upcast animated CHyprColor");
+                        function_name = pTypedAV->m_Context.sloc.function_name();
+                        source        = std::format("{}:{}", pTypedAV->m_Context.sloc.file_name(), pTypedAV->m_Context.sloc.line());
+                    } break;
+                    default: UNREACHABLE();
+                }
+            }
+            ret += std::format("\n\torigin: {}\n\t\tsource: {}\n\t\texpired: {}\n\t\tpercent complete: {}\n", (EXPIRED) ? "expired (unknown)" : function_name, source, EXPIRED,
+                               animvar->getPercent());
+        }
+
+        if (g_pAnimationManager->m_vActiveAnimatedVariables.empty())
+            ret += "\n\tNo active animations\n";
+
         ret += "animations:\n";
 
         for (auto const& ac : g_pConfigManager->getAnimationConfig()) {
@@ -792,6 +829,52 @@ static std::string animationsRequest(eHyprCtlOutputFormat format, std::string re
         // json
 
         ret += "[[";
+
+        for (auto const& animvar : g_pAnimationManager->m_vActiveAnimatedVariables) {
+            const bool  EXPIRED       = animvar.expired();
+            std::string function_name = "";
+            std::string source        = "";
+
+            if (!EXPIRED) {
+                switch (animvar->m_Type) {
+                    case AVARTYPE_FLOAT: {
+                        auto pTypedAV = dynamic_cast<CAnimatedVariable<float>*>(animvar.get());
+                        RASSERT(pTypedAV, "Failed to upcast animated float");
+                        function_name = pTypedAV->m_Context.sloc.function_name();
+                        source        = std::format("{}:{}", pTypedAV->m_Context.sloc.file_name(), pTypedAV->m_Context.sloc.line());
+                    } break;
+                    case AVARTYPE_VECTOR: {
+                        auto pTypedAV = dynamic_cast<CAnimatedVariable<Vector2D>*>(animvar.get());
+                        RASSERT(pTypedAV, "Failed to upcast animated Vector2D");
+                        function_name = pTypedAV->m_Context.sloc.function_name();
+                        source        = std::format("{}:{}", pTypedAV->m_Context.sloc.file_name(), pTypedAV->m_Context.sloc.line());
+                    } break;
+                    case AVARTYPE_COLOR: {
+                        auto pTypedAV = dynamic_cast<CAnimatedVariable<CHyprColor>*>(animvar.get());
+                        RASSERT(pTypedAV, "Failed to upcast animated CHyprColor");
+                        function_name = pTypedAV->m_Context.sloc.function_name();
+                        source        = std::format("{}:{}", pTypedAV->m_Context.sloc.file_name(), pTypedAV->m_Context.sloc.line());
+                    } break;
+                    default: UNREACHABLE();
+                }
+            }
+            ret += std::format(R"#(
+{{
+  "function_name": "{}",
+  "source": "{}",
+  "expired": "{}",
+  "percent copmlete": "{}"
+}},)#",
+                               (EXPIRED) ? "expired (unknown)" : function_name, source, EXPIRED, animvar->getPercent());
+        }
+
+        if (g_pAnimationManager->m_vActiveAnimatedVariables.empty())
+            ret += "]";
+        else
+            ret[ret.length() - 1] = ']';
+
+        ret += ",\n[";
+
         for (auto const& ac : g_pConfigManager->getAnimationConfig()) {
             ret += std::format(R"#(
 {{

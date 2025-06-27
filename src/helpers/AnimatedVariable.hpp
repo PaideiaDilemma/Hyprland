@@ -1,6 +1,7 @@
 #pragma once
 
 #include <hyprutils/animation/AnimatedVariable.hpp>
+#include <source_location>
 
 #include "Color.hpp"
 #include "../defines.hpp"
@@ -56,11 +57,12 @@ template <class T>
 concept Animable = OneOf<T, Vector2D, float, CHyprColor>;
 
 struct SAnimationContext {
-    PHLWINDOWREF      pWindow;
-    PHLWORKSPACEREF   pWorkspace;
-    PHLLSREF          pLayer;
+    PHLWINDOWREF         pWindow;
+    PHLWORKSPACEREF      pWorkspace;
+    PHLLSREF             pLayer;
 
-    eAVarDamagePolicy eDamagePolicy = AVARDAMAGE_NONE;
+    eAVarDamagePolicy    eDamagePolicy = AVARDAMAGE_NONE;
+    std::source_location sloc;
 };
 
 template <Animable VarType>
